@@ -5,4 +5,5 @@ public:
 	Menu();
 	~Menu();
 	void displayMainMenu();
+	void displayFileMenu();
 };

@@ -15,4 +15,4 @@ public:
 	void loadFromFile(string filePath);
 	void loadFromFileXML(string filePath);
 	void display();
-}
+};
