@@ -129,9 +129,11 @@
   <ItemGroup>
     <ClCompile Include="Matrix.cpp" />
     <ClCompile Include="Menu.cpp" />
+    <ClCompile Include="MyFunctions.cpp" />
     <ClCompile Include="PEA_Zadanie2.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="testing_files\br17.atsp" />
     <None Include="testing_files\ftv170.atsp" />
     <None Include="testing_files\ftv55.atsp" />
     <None Include="testing_files\rbg358.atsp" />
@@ -143,6 +145,7 @@
   <ItemGroup>
     <ClInclude Include="Matrix.h" />
     <ClInclude Include="Menu.h" />
+    <ClInclude Include="MyFunctions.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

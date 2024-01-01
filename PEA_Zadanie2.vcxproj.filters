@@ -24,6 +24,9 @@
     <ClCompile Include="Matrix.cpp">
       <Filter>Pliki źródłowe</Filter>
     </ClCompile>
+    <ClCompile Include="MyFunctions.cpp">
+      <Filter>Pliki źródłowe</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="testing_files\ftv55.atsp">
@@ -33,6 +36,9 @@
       <Filter>Pliki zasobów</Filter>
     </None>
     <None Include="testing_files\rbg358.atsp">
+      <Filter>Pliki zasobów</Filter>
+    </None>
+    <None Include="testing_files\br17.atsp">
       <Filter>Pliki zasobów</Filter>
     </None>
   </ItemGroup>
@@ -49,6 +55,9 @@
       <Filter>Pliki nagłówkowe</Filter>
     </ClInclude>
     <ClInclude Include="Matrix.h">
+      <Filter>Pliki nagłówkowe</Filter>
+    </ClInclude>
+    <ClInclude Include="MyFunctions.h">
       <Filter>Pliki nagłówkowe</Filter>
     </ClInclude>
   </ItemGroup>

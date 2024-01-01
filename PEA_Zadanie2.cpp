@@ -6,6 +6,7 @@
 #include "MyFunctions.h"
 #include <random>
 #include <fstream>
+#include <vector>
 
 
 using namespace std;
@@ -18,7 +19,7 @@ Matrix matrix = Matrix();
 
 int* bestPath;
 int bestPathLength;
-
+long long timeToFindBest;
 
 string savePath;
 
@@ -28,13 +29,21 @@ int stop;
 //wspolczynnik zmiany temperatury
 double alpha;
 
+//zmienne potrzebne do wykresow
+vector<long long> timeVector;
+vector<double> bladVector;
+
 void manageMainMenu();
 
 int* generateStartingPath();
 double calculateStartingTemperature();
-void simulatedAnnealingAlgorithm(double temperature,int* startingPath, int startingPathLength);
-void savePathToFile();
+double simulatedAnnealingAlgorithm(double temperature,int* startingPath, int startingPathLength);
+void savePathToFile(int* path);
 void readPathFromFile(string filePath);
+
+void test();
+
+void testBladWzgledny();
 
 int opt;
 
@@ -47,6 +56,9 @@ int main()
         manageMainMenu();
     } while (mainMenuChoice != 0);
     menu.~Menu();
+
+	delete[] bestPath;
+	return 0;
 }
 
 void manageMainMenu() {
@@ -54,12 +66,15 @@ void manageMainMenu() {
 	string readPath;
 	int fileChoice;
 
-	int* startingPath;
+	int* startingPath = nullptr;
 	int startingPathLength;
 
 
 	double temperature;
 	double bladWzgledny;
+	double wyrazenieTemperatury;
+
+	int numberOfCities;
 
 	cin >> mainMenuChoice;
 	switch (mainMenuChoice) {
@@ -101,7 +116,7 @@ void manageMainMenu() {
 		break;
 	case 2:
 		//Podanie kryterium stopu
-		cout << "Podaj kryterium stopu w minutach " << endl;
+		cout << "Podaj kryterium stopu w sekundach " << endl;
 		cin >> stop;
 		break;
 	case 3:
@@ -128,29 +143,46 @@ void manageMainMenu() {
 		temperature = calculateStartingTemperature();
 
 		//Algorytm
-		simulatedAnnealingAlgorithm(temperature, startingPath,startingPathLength);
+		temperature = simulatedAnnealingAlgorithm(temperature, startingPath,startingPathLength);
 		cout << "Dlugosc sciezki wyliczonej: " << bestPathLength << endl;
 
 		for (int i = 0; i < matrix.numberOfCities; i++) {
 			cout << bestPath[i] << "->";
 		}
 		cout << bestPath[matrix.numberOfCities] << endl;
+		cout << "Czas potrzebny na znalezienie rozwiazania: " << timeToFindBest/1000000 << "s" << endl;
 
 		bladWzgledny = abs(bestPathLength - opt) / (double)opt;
-		cout << "Blad wzgledny " << bladWzgledny << endl;
+		cout << "Blad wzgledny " << bladWzgledny << "%" << endl;
+		cout << "Temperatura koncowa " << temperature << endl;
+		wyrazenieTemperatury = exp(-1 / temperature);
+		cout << "exp(-1/Tk) " << wyrazenieTemperatury << endl;
+ 
 		break;
 	case 5:
 		//Zapis sciezki do pliku txt
-		savePathToFile();
+		savePathToFile(bestPath);
 		break;
 	case 6:
 		//Wczytanie sciezki z pliku txt i obliczenie drogi
 		cout << "Podaj sciezke do pliku: ";
 		cin >> readPath;
 		readPathFromFile(readPath);
-
-
+		
+		bestPathLength = 0;
+		for (int i = 0; i < matrix.numberOfCities; i++) {
+			cout << bestPath[i] <<"->";
+			bestPathLength += matrix.matrix[bestPath[i]][bestPath[i + 1]];
+		}
+		cout << bestPath[matrix.numberOfCities] << endl;
+		cout << "Dlugosc wczytanej sciezki: " << bestPathLength << endl;
 		break;
+	case 7:
+		//Testy do sprawka
+		test();
+	case 8:
+		//Testy pod wykresy
+		testBladWzgledny();
 	default:
 		break;
 	}
@@ -166,7 +198,6 @@ int* generateStartingPath() {
 		visited[i] = false;
 	}
 	visited[currentCity] = true;
-
 	startingBest[0] = currentCity;
 
 	for (int i = 0; i < matrix.numberOfCities - 1; i++) {
@@ -187,8 +218,8 @@ int* generateStartingPath() {
 			startingBest[i + 1] = nextCity;
 		}
 	}
-
-	startingBest[matrix.numberOfCities] = startingBest[0]; // Zamknięcie cyklu
+	// Zamknięcie cyklu
+	startingBest[matrix.numberOfCities] = startingBest[0]; 
 	delete[] visited;
 
 	return startingBest;
@@ -217,84 +248,119 @@ double calculateStartingTemperature() {
 	return (maxD - minD) / (minD+1.0);
 }
 
-void simulatedAnnealingAlgorithm(double temperature, int* startingPath, int startingPathLength) {
+double simulatedAnnealingAlgorithm(double temperature, int* startingPath, int startingPathLength) {
 	steady_clock::time_point start = steady_clock::now();
 	steady_clock::duration duration;
 
+	//na potrzeby stworzenia wykresow
+	timeVector.clear();
+	bladVector.clear();
+
+	//na poczatek najlepsza sciezka jest sciezka startowa - wyliczona metoda zachlanna
 	bestPath = startingPath;
 	bestPathLength = startingPathLength;
 
+	//sciezka najlepsza lokalnie
+	int* currentBestPath = new int[matrix.numberOfCities + 1];
+	for (int i = 0; i <= matrix.numberOfCities; i++) {
+		currentBestPath[i] = startingPath[i];
+	}
+	int currentBestPathLength = startingPathLength;
 
-	int temp = 0;
+	//zmienna pomocna do losowej zmiany w tabeli
+	int temporary;
+
 	do {
-		//zamiana losowych miast
-		int v1, v2;
-		do {
-			v1 = generateRandomInt(1, matrix.numberOfCities-1);
-			v2 = generateRandomInt(1, matrix.numberOfCities-1);
-		} while (
-			v1 == v2 
-			);
+		//sprawdzenie czy lokalnie najlepsza sciezka jest lepsza od najlepszej globalnie
+		if (currentBestPathLength < bestPathLength) {
+			duration = steady_clock::now() - start;
+			timeToFindBest = duration_cast<microseconds>(duration).count();
+			delete[] bestPath;
+			bestPath = new int[matrix.numberOfCities + 1];
+			for (int i = 0; i <= matrix.numberOfCities; i++) {
+				bestPath[i] = currentBestPath[i];
+			}
+			bestPathLength = currentBestPathLength;
 
-		 
-		int* newPath = new int[matrix.numberOfCities+1];
-
-		for (int i = 0; i <= matrix.numberOfCities; i++) {
-			newPath[i] = bestPath[i];
-			if (newPath[i] != bestPath[i]) cout << "NIE " << endl;
+			timeVector.push_back(timeToFindBest);
+			bladVector.push_back((bestPathLength - opt) / (double)opt);
 		}
 
-		int temporary = newPath[v2];
+		//losowanie indeksow
+		int v1, v2;
+		do {
+			v1 = generateRandomInt(1, matrix.numberOfCities - 1);
+			v2 = generateRandomInt(1, matrix.numberOfCities - 1);
+		} while (
+			v1 == v2
+			);
+
+
+		int* newPath = new int[matrix.numberOfCities + 1];
+		int newPathLength;
+		//kopia lokalnej najlepszej do nowej sciezki losowej
+		for (int i = 0; i <= matrix.numberOfCities; i++) {
+			newPath[i] = currentBestPath[i];
+		}
+
+		//zamiana indeksow wylosowanych
+		temporary = newPath[v2];
 		newPath[v2] = newPath[v1];
 		newPath[v1] = temporary;
 
+
 		//obliczenie nowo powstałej trasy
-		int newPathLength = 0;
+		newPathLength = 0;
 		for (int i = 0; i < matrix.numberOfCities; i++) {
 			newPathLength += matrix.matrix[newPath[i]][newPath[i + 1]];
 		}
-		//cout << v1 << " " << v2 << " " << newPathLength << endl;
 
 		//decyzja czy zmiana nastąpi
-		if (newPathLength < bestPathLength) {
+		if (newPathLength < currentBestPathLength) {
+			delete[] currentBestPath;
+			currentBestPath = new int[matrix.numberOfCities + 1];
 			for (int i = 0; i <= matrix.numberOfCities; i++) {
-				bestPath[i] = newPath[i];
+				currentBestPath[i] = newPath[i];
 			}
-			bestPathLength = newPathLength;
+			currentBestPathLength = newPathLength;
 		}
 		else {
-			double probability = exp(-abs(newPathLength - bestPathLength) / temperature);
-
+			double probability = exp(-abs(newPathLength - currentBestPathLength) / temperature);
 			random_device rd;
 			mt19937 gen(rd());
 			uniform_real_distribution<double> dis(0.0, 1.0);
 			double randomDouble = dis(gen);
 
-			//cout << "randD: " << randomDouble << " prob: " << probability << endl;
 			if (randomDouble < probability) {
+				delete[] currentBestPath;
+				currentBestPath = new int[matrix.numberOfCities + 1];
 				for (int i = 0; i <= matrix.numberOfCities; i++) {
-					bestPath[i] = newPath[i];
+					currentBestPath[i] = newPath[i];
 				}
-				bestPathLength = newPathLength;
+				currentBestPathLength = newPathLength;
 			}
 		}
 
+		delete[] newPath;
+
 		//schładzanie
 		temperature *= alpha;
-		//cout << "temp " << temperature << endl;
+
+		//sprawdzenie czasu
 		duration = steady_clock::now() - start;
 	} while (duration_cast<seconds>(duration).count() < static_cast<long long>(stop) * 1);
-
-	
+	return temperature;
 }
 
-void savePathToFile() {
-	ofstream outfile(savePath, std::ios::out | std::ios::app);
+void savePathToFile(int* path) {
+	//ofstream outfile(savePath, std::ios::out | std::ios::app);
+	ofstream outfile(savePath);
 	if (outfile.is_open()) {
-		outfile << matrix.numberOfCities;
+		outfile << matrix.numberOfCities << endl;
 		for (int i = 0; i <= matrix.numberOfCities; i++) {
-			outfile << " "+bestPath[i];
+			outfile << path[i] << endl;;
 		}
+		outfile.close();
 	}
 	else {
 		std::cout << "Nie mozna otworzyc pliku." << endl;
@@ -307,16 +373,15 @@ void readPathFromFile(string filePath) {
 		cout << "Podano bledna sciezke do pliku!" << endl;
 	}
 	else {
-		bestPath = NULL;
 		bestPathLength = 0;
 
 		int len;
 		myFile >> len;
+		delete[] bestPath;
 		bestPath = new int[len+1];
 
 		for (int i = 0; i <= len; i++) {
 			myFile >> bestPath[i];
-
 		}
 
 
@@ -324,4 +389,142 @@ void readPathFromFile(string filePath) {
 	}
 }
 
+void test() {
 
+	double testingAlpha[] = { 0.99999975,0.999999925};
+	int stopArr[] = { 60,120,240 };
+	int optArr[] = { 1608,2755,1163 };
+	string filePaths[] = { "testing_files/ftv55.atsp","testing_files/ftv170.atsp","testing_files/rbg358.atsp" };
+	string savePaths[] = { "testing_files/sa_ftv55.txt","testing_files/sa_ftv170.txt","testing_files/sa_rbg358.txt" };
+
+
+
+	int* startingPath = nullptr;
+	int startingPathLength;
+
+
+	double temperature;
+	double bladWzgledny;
+	double wyrazenieTemperatury;
+
+
+	for (int fileNumber = 0; fileNumber < 3; fileNumber++) {
+		matrix.loadFromFile(filePaths[fileNumber]);
+		savePath = savePaths[fileNumber];
+		stop = stopArr[fileNumber];
+		opt = optArr[fileNumber];
+
+		int* bestForFile = new int[matrix.numberOfCities + 1];
+		int bestForFileLen = INT_MAX;
+
+		for (int alphaNumber = 0; alphaNumber < 2; alphaNumber++) {
+			cout << "Testowanie alpha:" << testingAlpha[alphaNumber] << " plik " << filePaths[fileNumber] << endl;
+			alpha = testingAlpha[alphaNumber];
+			cout << "alpha " << alpha << endl;
+			for (int k = 0; k < 10; k++) {
+				
+				startingPath = generateStartingPath();
+				startingPathLength = 0;
+				for (int i = 0; i < matrix.numberOfCities; i++) {
+					startingPathLength += matrix.matrix[startingPath[i]][startingPath[i + 1]];
+				}
+
+				temperature = calculateStartingTemperature();
+				temperature = simulatedAnnealingAlgorithm(temperature, startingPath, startingPathLength);
+				bladWzgledny = abs(bestPathLength - opt) / (double)opt;
+				wyrazenieTemperatury = exp(-1 / temperature);
+
+				ofstream outfile("testing_files/testResults.txt", std::ios::out | std::ios::app);
+				if (outfile.is_open()) {
+					outfile << bestPathLength;
+					outfile << ";";
+					outfile << bladWzgledny;
+					outfile << ";";
+					outfile << temperature;
+					outfile << ";";
+					outfile << wyrazenieTemperatury;
+					outfile << ";";
+					outfile << alpha;
+					outfile << ";";
+					outfile << timeToFindBest;
+					outfile << ";" << endl;
+					outfile.close();
+				}
+				else {
+					cout << "Nie mozna otworzyc pliku." << endl;
+				}
+
+				if (bestPathLength < bestForFileLen) {
+					bestForFileLen = bestPathLength;
+					delete[] bestForFile;
+					bestForFile = new int[matrix.numberOfCities + 1];
+					for (int i = 0; i <= matrix.numberOfCities; i++) {
+						bestForFile[i] = bestPath[i];
+					}
+				}
+
+			}
+		}
+		savePathToFile(bestForFile);
+		delete[] bestForFile;
+		//zapis najlepszego rozwiazania
+	}
+
+}
+
+void testBladWzgledny() {
+	double testingAlpha[] = {
+		0.99999975,
+		0.9999999,
+		0.999999925 };
+	int stopArr[] = { 60,120,240 };
+	int optArr[] = { 1608,2755,1163 };
+	string filePaths[] = { "testing_files/ftv55.atsp","testing_files/ftv170.atsp","testing_files/rbg358.atsp" };
+
+
+	int* startingPath = nullptr;
+	int startingPathLength;
+
+
+	double temperature;
+	double bladWzgledny;
+	double wyrazenieTemperatury;
+
+
+	for (int fileNumber = 0; fileNumber < 3; fileNumber++) {
+		matrix.loadFromFile(filePaths[fileNumber]);
+		stop = stopArr[fileNumber];
+		opt = optArr[fileNumber];
+
+
+		for (int alphaNumber = 0; alphaNumber < 3; alphaNumber++) {
+			alpha = testingAlpha[alphaNumber];
+			startingPath = generateStartingPath();
+			startingPathLength = 0;
+			for (int i = 0; i < matrix.numberOfCities; i++) {
+				startingPathLength += matrix.matrix[startingPath[i]][startingPath[i + 1]];
+			}
+
+			temperature = calculateStartingTemperature();
+			temperature = simulatedAnnealingAlgorithm(temperature, startingPath, startingPathLength);
+
+			ofstream outfile("testing_files/testBlad.txt", std::ios::out | std::ios::app);
+			if (outfile.is_open()) {
+				outfile << filePaths[fileNumber] << ";" << testingAlpha[alphaNumber] << ";" << endl;
+				for (int i = 0; i < bladVector.size(); i++) {
+					outfile << timeVector[i] << ";";
+				}
+				outfile << endl << endl;
+				for (int i = 0; i < bladVector.size(); i++) {
+					outfile << bladVector[i] << ";";
+				}
+				outfile << endl;
+				outfile.close();
+			}
+			else {
+				cout << "Nie mozna otworzyc pliku." << endl;
+			}
+			
+		}
+	}
+}

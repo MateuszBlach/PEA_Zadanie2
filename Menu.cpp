@@ -15,6 +15,8 @@ void Menu::displayMainMenu() {
 	cout << "4. Uruchom algorytm - Symulowane Wyzarzanie" << endl;
 	cout << "5. Zapisz sciezke do pliku txt" << endl;
 	cout << "6. Wczytaj sciezke z pliku txt i oblicz droge" << endl;
+	cout << "7. Testy" << endl;
+	cout << "8. Testy pod wykres" << endl;
 	cout << "0. Zakoncz program" << endl;
 	cout << "Wybor: ";
 }
